@@ -1,12 +1,16 @@
 use anyhow::{Error, Result};
 use poise::{command, Context};
 use serenity::prelude::Mentionable;
-use songbird::{get, input::ytdl_search};
+use songbird::{
+    get,
+    input::{Input, Restartable},
+};
 
 use crate::Data;
 
 #[command(slash_command, prefix_command)]
 pub async fn join(context: Context<'_, Data, Error>) -> Result<()> {
+    context.defer().await?;
     let Some(guild_id) = context.guild_id() else {
         context.reply("you're not in a guild!").await?;
         return Ok(());
@@ -27,7 +31,7 @@ pub async fn join(context: Context<'_, Data, Error>) -> Result<()> {
         context.reply("no voice client!").await?;
         return Ok(());
     };
-    let (_handle_lock, success) = manager.join(guild_id, connect_to).await;
+    let (_, success) = manager.join(guild_id, connect_to).await;
 
     if success.is_ok() {
         context
@@ -46,6 +50,7 @@ pub async fn join(context: Context<'_, Data, Error>) -> Result<()> {
 
 #[command(slash_command, prefix_command)]
 pub async fn leave(context: Context<'_, Data, Error>) -> Result<()> {
+    context.defer().await?;
     let Some(guild_id) = context.guild_id() else {
         context.reply("you're not in a guild!").await?;
         return Ok(());
@@ -79,16 +84,20 @@ pub async fn play(context: Context<'_, Data, Error>, query: String) -> Result<()
         return Ok(());
     };
     if let Some(handler_lock) = manager.get(guild_id) {
-        let Ok(source) = ytdl_search(&query).await else {
+        let Ok(source) = Restartable::ytdl_search(&query, true).await else {
             context.reply("i couldn't start the source!").await?;
             return Ok(());
         };
-        let metadata = source.metadata.clone();
-        handler_lock.lock().await.play_source(source);
+        let input: Input = source.into();
+        let metadata = input.metadata.clone();
+        let mut handler = handler_lock.lock().await;
+        let queue_length = handler.queue().len();
+        handler.enqueue_source(input);
+        drop(handler);
         context
             .reply(metadata.title.map_or_else(
                 || "playing a song (couldn't get title!)".to_string(),
-                |title| format!("playing `{}`!", title),
+                |title| format!("playing `{}` (position {})!", title, queue_length),
             ))
             .await?;
     } else {
