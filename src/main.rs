@@ -6,13 +6,9 @@ mod music;
 
 use anyhow::Result;
 use dotenv_codegen::dotenv;
-use general::ping;
+use general::{ping, register};
 use music::{join, leave, play};
-use poise::{
-    samples::{register_globally, register_in_guild},
-    serenity_prelude::GuildId,
-    Framework, FrameworkOptions,
-};
+use poise::{Framework, FrameworkOptions};
 use serenity::prelude::GatewayIntents;
 use songbird::SerenityInit;
 
@@ -25,7 +21,7 @@ pub struct Data;
 async fn main() -> Result<()> {
     Framework::builder()
         .options(FrameworkOptions {
-            commands: vec![ping(), join(), leave(), play()],
+            commands: vec![ping(), join(), leave(), play(), register()],
             on_error: |error| {
                 Box::pin(async move {
                     dbg!(error);
@@ -35,16 +31,9 @@ async fn main() -> Result<()> {
         })
         .token(dotenv!("BOT_TOKEN"))
         .intents(GatewayIntents::all())
-        .setup(|context, _ready, framework| {
+        .setup(|_, _, _| {
             Box::pin(async move {
                 println!("Ready!");
-                register_globally(context, &framework.options().commands).await?;
-                register_in_guild(
-                    context,
-                    &framework.options().commands,
-                    GuildId(dotenv!("PRIMARY_GUILD").parse()?),
-                )
-                .await?;
                 Ok(Data)
             })
         })
