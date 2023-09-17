@@ -1,32 +1,36 @@
 #![warn(clippy::pedantic, clippy::nursery, clippy::unwrap_used)]
+#![feature(async_closure)]
 
-use anyhow::{Error, Result};
+mod general;
+mod music;
+
+use anyhow::Result;
 use dotenv_codegen::dotenv;
+use general::ping;
+use music::{join, leave, play};
 use poise::{
-    command,
     samples::{register_globally, register_in_guild},
     serenity_prelude::GuildId,
-    Context, Framework, FrameworkOptions,
+    Framework, FrameworkOptions,
 };
 use serenity::prelude::GatewayIntents;
+use songbird::SerenityInit;
 
 use std::vec;
 
 #[derive(Debug)]
-struct Data;
-
-#[command(slash_command, prefix_command)]
-async fn ping(context: Context<'_, Data, Error>) -> Result<()> {
-    let ping = context.ping().await;
-    context.reply(format!("Pong! {}ms", ping.as_millis())).await?;
-    Ok(())
-}
+pub struct Data;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     Framework::builder()
         .options(FrameworkOptions {
-            commands: vec![ping()],
+            commands: vec![ping(), join(), leave(), play()],
+            on_error: |error| {
+                Box::pin(async move {
+                    dbg!(error);
+                })
+            },
             ..Default::default()
         })
         .token(dotenv!("BOT_TOKEN"))
@@ -44,6 +48,7 @@ async fn main() -> Result<()> {
                 Ok(Data)
             })
         })
+        .client_settings(SerenityInit::register_songbird)
         .run()
         .await?;
     Ok(())
